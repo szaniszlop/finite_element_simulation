@@ -3,7 +3,6 @@ package com.psz.graphics.finelmsim.ui;
 import java.awt.BorderLayout;
 import java.awt.EventQueue;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
 import java.awt.GridLayout;
@@ -14,12 +13,10 @@ import java.util.Map;
 import java.util.Optional;
 import java.util.Map.Entry;
 import java.util.concurrent.ThreadLocalRandom;
-import java.time.Instant;
 
 import javax.swing.JButton;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
-import javax.swing.JTextField;
 import javax.swing.JPanel;
 
 import org.springframework.beans.BeansException;
@@ -27,6 +24,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 
 import com.psz.graphics.finelmsim.domain.element.MassiveBody;
@@ -38,7 +36,6 @@ import com.psz.graphics.finelmsim.utils.MethodTimer;
 import com.psz.graphics.finelmsim.utils.NormalDistribution;
 import com.psz.graphics.finelmsim.utils.MethodTimer.TimeUnit;
 import com.psz.graphics.finelmsim.utils.NormalDistribution.DoublePair;
-import com.psz.graphics.finelmsim.utils.NormalDistribution.IntPair;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -47,16 +44,14 @@ import lombok.extern.slf4j.Slf4j;
 public class MainFrame extends JFrame implements ApplicationRunner, ApplicationContextAware{
 
     private ApplicationContext applicationContext;
-    private final JTextField tetxtField;
     private MassTreeCanvas masTreeCanvas;
     private List<MassiveBody> bodies;
     private GravitySimulator gravitySimulator;
 
-    private double deltaT = 0.001;
-    private double simulationTheta = 2.5;
+    private double deltaT = 0.005;
+    private double simulationTheta = 3.0;
 
 	public MainFrame() {
-        this.tetxtField = titleText();
         initUI();
     }
 
@@ -85,7 +80,7 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
 
         MethodTimer<List<MassiveBody>> createBodiesTimer = new MethodTimer<>();
         this.bodies = createBodiesTimer.timeMethodExecution("createTwoSwarmsNormalRandomBodies", TimeUnit.mili, 
-            () -> createTwoSwarmsNormalRandomBodies((int)Math.round(gridSize), 0.05, 100));
+            () -> createNormalRandomBodies((int)Math.round(gridSize), 0.05, 100));
         log.info("Number of Bodies created {}", bodies.size());            
 
         MethodTimer<MassBodyTree> treeTimer = new MethodTimer<>();
@@ -107,10 +102,6 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
             pane.add(componentEntry.getValue(), componentEntry.getKey());
         }
     }    
-
-    private JTextField titleText(){
-        return new JTextField("Spring Boot can be used with Swing apps");
-    }
 
     private JComponent buttonsPanel(){
         JPanel panel = new JPanel();
@@ -180,7 +171,7 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
     }
 
     @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+    public void setApplicationContext(@NonNull ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = applicationContext;
     }
     

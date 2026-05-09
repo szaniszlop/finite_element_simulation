@@ -27,11 +27,13 @@ public class GravitySimulator implements Runnable{
 
     private List<MassiveBody> bodies;
 
+    private GravitySimulator2DCalculation calculation;
+
     public GravitySimulator(MassTreeCanvas canvas, double deltaT, double theta, int gridSize){
         this.canvas = canvas;
         this.deltaT = deltaT;
-         this.theta = theta;
-         this.gridSize = gridSize;
+        this.theta = theta;
+        this.gridSize = gridSize;
         this.running = false;
         this.runtimeThread = new Thread(this);
         canvas.setTheta(theta);
@@ -46,12 +48,14 @@ public class GravitySimulator implements Runnable{
         canvas.setShowMasses(false);             
         this.runtimeThread = new Thread(this);
         this.bodies = bodies;
+        this.calculation = new GravitySimulator2DCalculation(bodies, this.gridSize);
         this.running = true;
         runtimeThread.start();
     }
 
     public void stopSimulation(){
         this.running = false;
+        MethodTimer.logStatistics();        
     }
 
     public boolean isRunning(){
@@ -64,9 +68,9 @@ public class GravitySimulator implements Runnable{
         try{
             while(running && bodies != null){
                 long frameStartTime = System.nanoTime();
-                MethodTimer.timeMethodExecution("UpdateBodies", MethodTimer.TimeUnit.micro, 
+                MethodTimer.timeMethodExecution("updateBodies", MethodTimer.TimeUnit.mili, 
                     () -> updateBodies()); 
-                MethodTimer.timeMethodExecution("DisplayBodies", MethodTimer.TimeUnit.micro, 
+                MethodTimer.timeMethodExecution("displayBodies", MethodTimer.TimeUnit.micro, 
                     () -> displayBodies());     
                 long frameStopTime = System.nanoTime();
                 long frameDuration = frameStopTime - frameStartTime;
@@ -80,7 +84,7 @@ public class GravitySimulator implements Runnable{
     }
 
     private void updateBodies(){
-        this.bodies = GravitySimulator2DCalculation.step(bodies, deltaT, theta, gridSize);
+        this.bodies = calculation.step(deltaT, theta);
     }
 
     private void displayBodies(){

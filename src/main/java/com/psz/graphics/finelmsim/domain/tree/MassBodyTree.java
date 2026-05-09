@@ -6,6 +6,11 @@ import com.psz.graphics.finelmsim.domain.element.MassiveBody;
 import com.psz.graphics.finelmsim.domain.element.Position;
 
 public interface MassBodyTree {
+
+    void clearNode(int nodeIndex);
+
+    void replaceNode(TreeNode oldNode, TreeNode newNode);
+
     void addBody(MassiveBody body);
     
     void calculateMassDistribution();

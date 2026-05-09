@@ -7,6 +7,8 @@ import java.util.function.Supplier;
 @Slf4j
 public class MethodTimer< T > {
 
+    private static final java.util.Map<String, MethodTimingStatistics> methodStatistics = new java.util.concurrent.ConcurrentHashMap<>();
+
     public static enum TimeUnit{
         mili(1000000),
         micro(1000),
@@ -34,6 +36,7 @@ public class MethodTimer< T > {
         method.execute();
         long end = System.nanoTime();
         log.info("{} executed in {} {}-seconds ", methodName, (end - start) / timeUnit.nanoMultiplier, timeUnit.name());
+        methodStatistics.computeIfAbsent(methodName, k -> new MethodTimingStatistics(timeUnit)).addExecutionTime(end - start);
     }    
 
     public T timeMethodExecution(String methodName, TimeUnit timeUnit, Supplier<T> method){
@@ -41,8 +44,36 @@ public class MethodTimer< T > {
         T result = method.get();
         long end = System.nanoTime();
         log.info("{} executed in {} {}-seconds ", methodName, (end - start) / timeUnit.nanoMultiplier, timeUnit.name());
+        methodStatistics.computeIfAbsent(methodName, k -> new MethodTimingStatistics(timeUnit)).addExecutionTime(end - start);
         return result;
-    }       
+    }   
+    
+    public static void logStatistics(){
+        methodStatistics.forEach((methodName, stats) -> {
+            log.info("Method: {}, Average Execution Time: {} {} over {} executions", methodName, stats.getAverageTime() / stats.timeUnit.nanoMultiplier, stats.timeUnit.name(), stats.executionCount);
+        });
+    }
+
+    private static class MethodTimingStatistics{
+        private long totalTime;
+        private int executionCount;
+        private TimeUnit timeUnit;
+
+        public MethodTimingStatistics(TimeUnit timeUnit){
+            this.totalTime = 0;
+            this.executionCount = 0;
+            this.timeUnit = timeUnit;
+        }
+
+        public void addExecutionTime(long time){
+            this.totalTime += time;
+            this.executionCount++;
+        }
+
+        public long getAverageTime(){
+            return executionCount == 0 ? 0 : totalTime / executionCount;
+        }
+    }   
 }
 
 

@@ -24,8 +24,8 @@ public class MassBodyTreeImpl implements MassBodyTree {
         // logb(n) = loge(n) / loge(b)
         // Approximate number of nodes will be 4 * numElements + 4 * (log4(numElements) - 1) + numElements / 2 as safety margin
         int estimatedArraySize = (int)Math.round(
-            4 * numElements + 4 * (Math.log(numElements) / Math.log(4) - 1) 
-            + numElements / 2);
+            size * size + 4 * (Math.log(size * size) / Math.log(4) - 1) 
+            + numElements );
         log.debug("Creating tree with capacity {} for number of elements {}", estimatedArraySize, numElements);
         content = Arrays.asList(new TreeNode[estimatedArraySize]);
         contentLastIndex = new AtomicInteger(0);
@@ -52,9 +52,7 @@ public class MassBodyTreeImpl implements MassBodyTree {
         for(int i = content.size() - 1 ; i>= 0 ; i--){
             TreeNode currentNode = content.get(i);
             if(currentNode != null){
-                Optional<MassiveBody> centerMass = nodeCenterMass(currentNode);
-                TreeNode nodeWithMass = TreeNode.cloneWithMass(currentNode, centerMass);
-                content.set(i, nodeWithMass);           
+                currentNode.setCenterMass(nodeCenterMass(currentNode));        
             }
         }
     }
@@ -66,43 +64,57 @@ public class MassBodyTreeImpl implements MassBodyTree {
         // return the node center mass
         // otherwise return the center masses of the child nodes
         List<MassiveBody> result = new ArrayList<>();
-        result.addAll(getAtractorsFromNode(position, theta, content.get(0)));
+        collectAtractorsFromNode(position, theta, content.get(0), result);
         return result;
     }
 
-    private List<MassiveBody> getAtractorsFromNode(Position position, double theta, TreeNode node){
-        List<MassiveBody> result = new ArrayList<>();
+    @Override
+    public void clearNode(int nodeIndex) {
+        if(nodeIndex < content.size()){
+            TreeNode currentNode = content.get(nodeIndex);
+            if (currentNode.childIndex() == nodeIndex & currentNode.isLeaf()) {
+                currentNode.clearContent();
+            }
+        }
+    }
+
+    @Override
+    public void replaceNode(TreeNode oldNode, TreeNode newNode) {
+        if(oldNode.childIndex() < content.size()){
+            TreeNode currentNode = content.get(oldNode.childIndex());
+            if (currentNode.childIndex() == newNode.childIndex() & currentNode.isLeaf() & newNode.isLeaf()) {
+                content.set(oldNode.childIndex(), newNode);
+            }
+        }
+    }
+
+    private void collectAtractorsFromNode(Position position, double theta, TreeNode node, List<MassiveBody> result){
+        
         if(node.isLeaf() || isBarnesHutCondition(position, node, theta)){
-            /*
-            if(position.distanceFromSquared(nodeCenterMass(node).get().position()) > 0){
-                result.add(node.centerMass().get());
-            }     
-            */
             result.add(node.centerMass().get());  
         } else {
-            result.addAll(getAtractorsFromNode(position, theta, 
-                content.get(node.childIndex() + 0)));
-            result.addAll(getAtractorsFromNode(position, theta, 
-                content.get(node.childIndex() + 1)));
-            result.addAll(getAtractorsFromNode(position, theta, 
-                content.get(node.childIndex() + 2)));
-            result.addAll(getAtractorsFromNode(position, theta, 
-                content.get(node.childIndex() + 3)));                                                            
+            collectAtractorsFromNode(position, theta, 
+                content.get(node.childIndex() + 0), result);
+            collectAtractorsFromNode(position, theta, 
+                content.get(node.childIndex() + 1), result );
+            collectAtractorsFromNode(position, theta, 
+                content.get(node.childIndex() + 2), result);
+            collectAtractorsFromNode(position, theta, 
+                content.get(node.childIndex() + 3), result);                                                            
         }
-
-        return result;        
+  
     }
 
     private boolean isBarnesHutCondition(Position position, TreeNode node, double theta){
         // size squared / distance squared < theta
-        return (node.size() * node.size()) / (position.distanceFromSquared(node.center())) < theta ;
+        return (node.sizeSquared()) / (position.distanceFromSquared(node.center())) < theta ;
     }
 
-    private Optional<MassiveBody> nodeCenterMass(TreeNode currentNode){
+    private MassiveBody nodeCenterMass(TreeNode currentNode){
         MassiveBody emptyMass = MassiveBody.stationary(currentNode.center(), 0);
 
         if( currentNode.isLeaf() ){
-            return currentNode.content().or(() -> Optional.of(emptyMass));                                    
+            return currentNode.content().or(() -> Optional.of(emptyMass)).get();                                    
         } 
         // calculate parent node center mass based on children center mass
 
@@ -115,7 +127,9 @@ public class MassBodyTreeImpl implements MassBodyTree {
         MassiveBody m3 = content.get(currentNode.childIndex() + 3)
             .centerMass().orElse(emptyMass);     
         int finalMass = m0.mass() + m1.mass() + m2.mass() + m3.mass();  
-        MassiveBody nodeCenterMass = MassiveBody.stationary( new Position(
+        MassiveBody nodeCenterMass = null;
+        if(finalMass > 0){
+            nodeCenterMass = MassiveBody.stationary( new Position(
             (m0.mass() * m0.position().x() 
             + m1.mass() * m1.position().x() 
             + m2.mass() * m2.position().x()
@@ -125,12 +139,16 @@ public class MassBodyTreeImpl implements MassBodyTree {
             + m2.mass() * m2.position().y()
             + m3.mass() * m3.position().y()) / finalMass), 
             finalMass); 
-        return Optional.of(nodeCenterMass);           
+        } else {
+            nodeCenterMass = emptyMass;
+        }
+
+        return nodeCenterMass;           
     }
 
     private void addBody(MassiveBody body, int index){
         TreeNode node = content.get(index);
-        log.debug("Add Body {} to note {} on index {}", body, node, index);
+        // log.debug("Add Body {} to note {} on index {}", body, node, index);
         if(node.isLeaf()){
             boolean finished = false;
             synchronized(node){
