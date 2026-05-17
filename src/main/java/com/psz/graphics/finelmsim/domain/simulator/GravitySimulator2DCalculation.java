@@ -14,7 +14,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class GravitySimulator2DCalculation {
 
-    private static final double REBUILD_TO_REPOSITION_THRESHOLD = 0.4;
+    private static final double REBUILD_TO_REPOSITION_THRESHOLD = 0.1;
     private final int gridSize;
     private MassBodyTree tree;
     private MethodTimer<List<TreeNode>> outOfGridNodesTimer;
@@ -41,7 +41,11 @@ public class GravitySimulator2DCalculation {
 
         /* 4. Reposition bodies of rebuild tree if repositioning not effective */
         if(outOfGridNodes.size() < (bodies.size() * REBUILD_TO_REPOSITION_THRESHOLD)){
-            repositionOutOfGridBodies(outOfGridNodes); 
+            try{
+                repositionOutOfGridBodies(outOfGridNodes); 
+            } catch (ArrayIndexOutOfBoundsException e) {
+                rebuildTreeFromScratch(bodies);
+            }
         } else {
             rebuildTreeFromScratch(bodies);
         } 
@@ -123,7 +127,7 @@ public class GravitySimulator2DCalculation {
                         .stream()
                         .parallel()
                         .map( e -> e.content().get())
-                        .forEach( e -> this.tree.addBody(e)));       
+                        .forEach( e -> this.tree.addBody(e)));      
 
     }
 

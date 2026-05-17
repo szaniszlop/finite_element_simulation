@@ -16,7 +16,7 @@ public class Position {
         return new Position(x, y);
     }
     
-    public static final double MIN_DISTANCE = 0.001;
+    public static final double MIN_DISTANCE = 0.01;
 
     public double distanceFromSquared(Position other){
         double deltaX = x - other.x;

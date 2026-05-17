@@ -27,6 +27,10 @@ public class GravitySimulator implements Runnable{
 
     private List<MassiveBody> bodies;
 
+    public List<MassiveBody> getBodies() {
+        return bodies;
+    }
+
     private GravitySimulator2DCalculation calculation;
 
     public GravitySimulator(MassTreeCanvas canvas, double deltaT, double theta, int gridSize){
