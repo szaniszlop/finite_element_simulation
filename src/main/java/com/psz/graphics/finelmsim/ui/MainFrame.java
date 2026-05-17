@@ -2,24 +2,22 @@ package com.psz.graphics.finelmsim.ui;
 
 import java.awt.BorderLayout;
 import java.awt.EventQueue;
+import java.awt.GridLayout;
 import java.awt.event.ActionEvent;
-import java.awt.event.ActionListener;
 import java.awt.event.ComponentAdapter;
 import java.awt.event.ComponentEvent;
-import java.awt.GridLayout;
-import java.util.List;
 import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.List;
 import java.util.Map;
-import java.util.Optional;
 import java.util.Map.Entry;
+import java.util.Optional;
 import java.util.concurrent.ThreadLocalRandom;
-import java.time.Instant;
 
 import javax.swing.JButton;
+import javax.swing.JComboBox;
 import javax.swing.JComponent;
 import javax.swing.JFrame;
-import javax.swing.JTextField;
 import javax.swing.JPanel;
 
 import org.springframework.beans.BeansException;
@@ -27,18 +25,16 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
+import org.springframework.lang.NonNull;
 import org.springframework.stereotype.Component;
 
 import com.psz.graphics.finelmsim.domain.element.MassiveBody;
-import com.psz.graphics.finelmsim.domain.element.Position;
+import com.psz.graphics.finelmsim.domain.generator.MassBodyGenerator;
 import com.psz.graphics.finelmsim.domain.simulator.GravitySimulator;
 import com.psz.graphics.finelmsim.domain.tree.MassBodyTree;
 import com.psz.graphics.finelmsim.domain.tree.impl.MassBodyTreeImpl;
 import com.psz.graphics.finelmsim.utils.MethodTimer;
-import com.psz.graphics.finelmsim.utils.NormalDistribution;
 import com.psz.graphics.finelmsim.utils.MethodTimer.TimeUnit;
-import com.psz.graphics.finelmsim.utils.NormalDistribution.DoublePair;
-import com.psz.graphics.finelmsim.utils.NormalDistribution.IntPair;
 
 import lombok.extern.slf4j.Slf4j;
 
@@ -46,27 +42,48 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class MainFrame extends JFrame implements ApplicationRunner, ApplicationContextAware{
 
+    private static final double DEFAULT_GRID_SIZE = 1024.0;
+
+    private static final int DEFAULT_WEIGHT = 100;
+
+    private static final double DEFAULT_DENSITY = 0.05;
+
+    private static final double DEFAULT_SIMULATION_THETA = 10.0;
+
+    private static final double DEFAULT_DELTA_T = 0.005;
+
     private ApplicationContext applicationContext;
-    private final JTextField tetxtField;
     private MassTreeCanvas masTreeCanvas;
     private List<MassiveBody> bodies;
     private GravitySimulator gravitySimulator;
+    private final Map<String, MassBodyGenerator> generators;
+    private JButton startStopSimulationButton;
 
-    private double deltaT = 0.001;
-    private double simulationTheta = 2.5;
+    private double deltaT = DEFAULT_DELTA_T;
+    private double simulationTheta = DEFAULT_SIMULATION_THETA;
+    private double density = DEFAULT_DENSITY;
+    private int initialWeight = DEFAULT_WEIGHT;
+
+    private final double gridSize;
 
 	public MainFrame() {
-        this.tetxtField = titleText();
-        initUI();
+        generators = new HashMap<>();
+        this.gridSize = DEFAULT_GRID_SIZE;
+        this.masTreeCanvas = new MassTreeCanvas((int)gridSize * 2, (int)gridSize, gridSize);
+        this.gravitySimulator = new GravitySimulator(masTreeCanvas, deltaT, simulationTheta,  (int)gridSize);     
+        this.bodies = new ArrayList<>();   
+    }
+
+    private void setupGenerators(){
+        applicationContext.getBeansOfType(MassBodyGenerator.class).values().stream().forEach( generator -> {
+            generators.put(generator.getName(), generator);
+            log.info("Registered Mass Body Generator: {} - {}", generator.getName(), generator.getDescription());
+        });
     }
 
     private void initUI() {
 
         Map<String, JComponent> components = new HashMap<String, JComponent>();
-
-        double gridSize = 1024.0;
-        masTreeCanvas = new MassTreeCanvas(2048, 1250, gridSize);
-        this.gravitySimulator = new GravitySimulator(masTreeCanvas, deltaT, simulationTheta,  (int)gridSize);
 
         components.put(BorderLayout.NORTH, buttonsPanel());
         components.put(BorderLayout.CENTER, masTreeCanvas);
@@ -83,19 +100,6 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
             }
         });
 
-        MethodTimer<List<MassiveBody>> createBodiesTimer = new MethodTimer<>();
-        this.bodies = createBodiesTimer.timeMethodExecution("createTwoSwarmsNormalRandomBodies", TimeUnit.mili, 
-            () -> createTwoSwarmsNormalRandomBodies((int)Math.round(gridSize), 0.05, 100));
-        log.info("Number of Bodies created {}", bodies.size());            
-
-        MethodTimer<MassBodyTree> treeTimer = new MethodTimer<>();
-        MassBodyTree tree = treeTimer.timeMethodExecution("createTree", TimeUnit.mili, 
-            () -> createTree(gridSize, this.bodies));
-
-        MethodTimer.timeMethodExecution("calculateMassDistribution", TimeUnit.mili, 
-            () -> tree.calculateMassDistribution());
-
-        masTreeCanvas.setTree(tree);
     }
 
     private void createLayout(Map<String, JComponent> components) {
@@ -108,19 +112,43 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
         }
     }    
 
-    private JTextField titleText(){
-        return new JTextField("Spring Boot can be used with Swing apps");
-    }
-
     private JComponent buttonsPanel(){
         JPanel panel = new JPanel();
-        panel.setLayout(new GridLayout(2,2));
+        panel.setLayout(new GridLayout(3,2));
         panel.add(toggleGridButton());
         panel.add(toggleMassesButton());
         panel.add(showRandomBodyButon());
         panel.add(startStopSimulationButton());
+        panel.add(massBodyGeneratorSelector());
         return panel;
 
+    }
+
+    private java.awt.Component massBodyGeneratorSelector() {
+        var generatorSelector = new JComboBox<>();
+
+        generators.entrySet().stream().forEach( entry -> generatorSelector.addItem(entry.getKey()));
+        generatorSelector.addActionListener((ActionEvent event) -> {
+            String selectedGeneratorName = (String) generatorSelector.getSelectedItem();
+            generatorSelectedEventHandler(selectedGeneratorName);
+        });
+        return generatorSelector;
+    }
+
+    private void generatorSelectedEventHandler(String selectedGeneratorName){
+        MassBodyGenerator selectedGenerator = generators.get(selectedGeneratorName);
+        if(selectedGenerator != null){
+            stopSimulationAction();
+            MethodTimer<List<MassiveBody>> createBodiesTimer = new MethodTimer<>();
+            this.bodies = createBodiesTimer.timeMethodExecution(selectedGeneratorName, TimeUnit.mili, 
+                () -> selectedGenerator.createBodies(this.gridSize, this.density, this.initialWeight));
+            log.info("Number of Bodies created {}", bodies.size());            
+            MassBodyTree tree = createTree(this.gridSize, this.bodies);
+            tree.calculateMassDistribution();
+            masTreeCanvas.setTree(tree);
+            masTreeCanvas.setBodiesToShow(bodies);
+            masTreeCanvas.showContent();
+        }
     }
 
     private JComponent quitButton(){
@@ -155,16 +183,27 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
 
         button.addActionListener((ActionEvent event) -> {
             if(gravitySimulator.isRunning()){
-                gravitySimulator.stopSimulation();
-                button.setText("start Simulation");
+                stopSimulationAction();
             } else {
-                masTreeCanvas.setBodyToShow(Optional.empty());
-                gravitySimulator.startSimulation(bodies);
-                button.setText("Stop Simulation");
+                startSimulationAction();
             }
         });
+        this.startStopSimulationButton = button;
         return button;
     }
+
+    private void stopSimulationAction(){
+        gravitySimulator.stopSimulation();
+        this.bodies = gravitySimulator.getBodies();
+        startStopSimulationButton.setText("Start Simulation");
+    }
+
+    private void startSimulationAction() {
+        masTreeCanvas.setBodyToShow(Optional.empty());
+        startStopSimulationButton.setText("Stop Simulation");
+        gravitySimulator.startSimulation(bodies);
+    }
+
 
     private JComponent showRandomBodyButon(){
         var button = new JButton("Show Random Body");
@@ -180,7 +219,7 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
     }
 
     @Override
-    public void setApplicationContext(ApplicationContext applicationContext) throws BeansException {
+    public void setApplicationContext(@NonNull ApplicationContext applicationContext) throws BeansException {
         this.applicationContext = applicationContext;
     }
     
@@ -188,118 +227,24 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
     public void run(ApplicationArguments args) throws Exception {
         EventQueue.invokeLater(() -> {
             var ex = applicationContext.getBean(MainFrame.class);
+            ex.setupGenerators();
+            ex.initUI();
             ex.pack();
             ex.setVisible(true);
         });	
     }
 
-    private List<MassiveBody> createRandomBodies(int gridSize, double density, int maxInitialMass){
-        List<MassiveBody> bodies = new ArrayList<>();
-
-        int numElements = (int)Math.floor(gridSize * gridSize * density);
-        for( int i = 0 ; i < numElements ; i++){
-            bodies.add(MassiveBody.stationary(
-                    new Position(ThreadLocalRandom.current().nextInt(0, gridSize), 
-                                 ThreadLocalRandom.current().nextInt(0, gridSize)), 
-                                 ThreadLocalRandom.current().nextInt(1, maxInitialMass)));
-        }
-        return bodies;
-    }
 
 
-    private List<MassiveBody> createNormalRandomBodies(double gridSize, double density, int maxInitialMass){
-        List<MassiveBody> bodies = new ArrayList<>();
-        double mean = gridSize / 2;
-        double stdev = Math.max(1, gridSize / 10);
-        int numElements = (int)Math.floor(gridSize * gridSize * density);
-        for( int i = 0 ; i < numElements ; i++){
-            DoublePair pair = NormalDistribution.getValueRandomPair(mean, stdev);
-            if(pair.z0() >= 0 && pair.z0() < gridSize && pair.z1() >= 0 && pair.z1() < gridSize){
-                bodies.add(MassiveBody.stationary(
-                    new Position(pair.z0(), pair.z1()), ThreadLocalRandom.current().nextInt(1, maxInitialMass)));
-            }
-            
-        }
-        return bodies;
-    }
 
-    private List<MassiveBody> createTwoSwarmsNormalRandomBodies(double gridSize, double density, int maxInitialMass){
-        List<MassiveBody> bodies = new ArrayList<>();
-        double meanY = gridSize / 2;
-        double meanXLeft = gridSize / 2 - gridSize / 6;
-        double meanXRight = gridSize / 2 + gridSize / 6;
-        double stdev = Math.max(1, gridSize / 10);
-        int numElements = (int)Math.floor(gridSize * gridSize * density);
-        for( int i = 0 ; i < numElements / 2 ; i++){
-            DoublePair pair = NormalDistribution.getValueRandomPair(meanXLeft, meanY, stdev);
-            if(isInsideGrid(pair, gridSize)){
-                bodies.add(MassiveBody.stationary(
-                    new Position(pair.z0(), pair.z1()), ThreadLocalRandom.current().nextInt(1, maxInitialMass)));
-            }
-            pair = NormalDistribution.getValueRandomPair(meanXRight, meanY, stdev);
-            if(isInsideGrid(pair, gridSize)){
-                bodies.add(MassiveBody.stationary(
-                    new Position(pair.z0(), pair.z1()), ThreadLocalRandom.current().nextInt(1, maxInitialMass)));
-            }
-        }
-        bodies.add(MassiveBody.stationary(new Position(meanY, meanY), maxInitialMass * 1000));
-        return bodies;
-    }
-
-    private boolean isInsideGrid(DoublePair pair, double gridSize){
-        return pair.z0() >= 0 && pair.z0() < gridSize && pair.z1() >= 0 && pair.z1() < gridSize;
-    }
-
-    private List<MassiveBody> createNormalRandomBodiesWithInitialVelocity(double gridSize, double density, int maxInitialMass){
-        List<MassiveBody> bodies = new ArrayList<>();
-        double mean = gridSize / 2;
-        double stdev = Math.max(1, gridSize / 8);
-        int numElements = (int)Math.floor(gridSize * gridSize * density);
-        Position origin = new Position(gridSize / 2, gridSize / 2);
-        for( int i = 0 ; i < numElements ; i++){
-            DoublePair pair = NormalDistribution.getValueRandomPair(mean, stdev);
-            if(pair.z0() >= 0 && pair.z0() < gridSize && pair.z1() >= 0 && pair.z1() < gridSize){
-                Position position = new Position(pair.z0(), pair.z1());
-                double distance = Math.sqrt(position.distanceFromSquared(origin));
-                // velocity vector is perpendicular to point vector and inversly proportional to its length
-                // double velocityMagnitude = gridSize / 10 / (distance * distance) / deltaT;
-                // double initialVelocityDumpening = (2 * distance /  (1 + distance * distance ));
-                double initialVelocityDumpening = 0.05;
-                double distanceLimit = 3.0 * stdev ;
-                double velocityMagnitude = distance > distanceLimit ? 1 / deltaT * initialVelocityDumpening : 1 / deltaT * Math.sqrt(distance) / distanceLimit ;                
-                double angle = Math.acos((position.x() - gridSize / 2) / distance);
-                if(position.y() > gridSize / 2){
-                    angle = angle * -1;
-                }
-                angle = angle + Math.PI / 2;
-                Position initialVelocity = new Position(velocityMagnitude * Math.cos(angle), 
-                                                        -1 * velocityMagnitude * Math.sin(angle) );
-                Position initialacceleration = new Position(velocityMagnitude  * Math.cos(angle + Math.PI / 2) , 
-                                                        -1 * velocityMagnitude  * Math.sin(angle + Math.PI / 2) );                                                        
-                bodies.add(new MassiveBody(
-                    position, 
-                    ThreadLocalRandom.current().nextInt(1, maxInitialMass),
-                    initialVelocity,
-                    initialacceleration
-                    ));
-            }
-            
-        }
-        /*
-        bodies.add(new MassiveBody(new Position(gridSize / 2 + 20, gridSize / 2), maxInitialMass * numElements, 
-            new Position(0, -10), 
-            new Position(-10, 0)));
-        bodies.add(new MassiveBody(new Position(gridSize / 2 - 20, gridSize / 2), maxInitialMass * numElements, 
-            new Position(0, 10), 
-            new Position(10, 0)));
-         */    
-        // bodies.add(MassiveBody.stationary(new Position(gridSize / 2, gridSize / 2), maxInitialMass * numElements));        
-        return bodies;
-    }
 
     private MassBodyTree createTree(double gridSize, List<MassiveBody> bodies){
         MassBodyTreeImpl tree = new MassBodyTreeImpl(gridSize, bodies.size());
         bodies.stream().forEach( e -> tree.addBody(e));
+        if(!tree.verifyTree()){
+            log.error("Tree verification failed after creating tree");
+            throw new RuntimeException("Tree verification failed after creating tree");
+        }
         return tree;
     }
 
