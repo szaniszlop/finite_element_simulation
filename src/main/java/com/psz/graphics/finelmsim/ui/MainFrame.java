@@ -49,7 +49,7 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
     private GravitySimulator gravitySimulator;
 
     private double deltaT = 0.005;
-    private double simulationTheta = 3.0;
+    private double simulationTheta = 10.0;
 
 	public MainFrame() {
         initUI();
@@ -80,7 +80,7 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
 
         MethodTimer<List<MassiveBody>> createBodiesTimer = new MethodTimer<>();
         this.bodies = createBodiesTimer.timeMethodExecution("createTwoSwarmsNormalRandomBodies", TimeUnit.mili, 
-            () -> createNormalRandomBodies((int)Math.round(gridSize), 0.05, 100));
+            () -> createNormalRandomBodiesWithInitialVelocity((int)Math.round(gridSize), 0.05, 100));
         log.info("Number of Bodies created {}", bodies.size());            
 
         MethodTimer<MassBodyTree> treeTimer = new MethodTimer<>();
@@ -217,9 +217,9 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
     private List<MassiveBody> createTwoSwarmsNormalRandomBodies(double gridSize, double density, int maxInitialMass){
         List<MassiveBody> bodies = new ArrayList<>();
         double meanY = gridSize / 2;
-        double meanXLeft = gridSize / 2 - gridSize / 6;
-        double meanXRight = gridSize / 2 + gridSize / 6;
-        double stdev = Math.max(1, gridSize / 10);
+        double meanXLeft = gridSize / 2 - gridSize / 5;
+        double meanXRight = gridSize / 2 + gridSize / 5;
+        double stdev = Math.max(1, gridSize / 15);
         int numElements = (int)Math.floor(gridSize * gridSize * density);
         for( int i = 0 ; i < numElements / 2 ; i++){
             DoublePair pair = NormalDistribution.getValueRandomPair(meanXLeft, meanY, stdev);
@@ -258,8 +258,8 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
                 double initialVelocityDumpening = 0.05;
                 double distanceLimit = 3.0 * stdev ;
                 double velocityMagnitude = distance > distanceLimit ? 1 / deltaT * initialVelocityDumpening : 1 / deltaT * Math.sqrt(distance) / distanceLimit ;                
-                double angle = Math.acos((position.x() - gridSize / 2) / distance);
-                if(position.y() > gridSize / 2){
+                double angle = Math.acos((position.getX() - gridSize / 2) / distance);
+                if(position.getY() > gridSize / 2){
                     angle = angle * -1;
                 }
                 angle = angle + Math.PI / 2;
@@ -276,14 +276,14 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
             }
             
         }
-        /*
+        
         bodies.add(new MassiveBody(new Position(gridSize / 2 + 20, gridSize / 2), maxInitialMass * numElements, 
             new Position(0, -10), 
             new Position(-10, 0)));
         bodies.add(new MassiveBody(new Position(gridSize / 2 - 20, gridSize / 2), maxInitialMass * numElements, 
             new Position(0, 10), 
             new Position(10, 0)));
-         */    
+          
         // bodies.add(MassiveBody.stationary(new Position(gridSize / 2, gridSize / 2), maxInitialMass * numElements));        
         return bodies;
     }
@@ -291,6 +291,10 @@ public class MainFrame extends JFrame implements ApplicationRunner, ApplicationC
     private MassBodyTree createTree(double gridSize, List<MassiveBody> bodies){
         MassBodyTreeImpl tree = new MassBodyTreeImpl(gridSize, bodies.size());
         bodies.stream().forEach( e -> tree.addBody(e));
+        if(!tree.verifyTree()){
+            log.error("Tree verification failed after creating tree");
+            throw new RuntimeException("Tree verification failed after creating tree");
+        }
         return tree;
     }
 

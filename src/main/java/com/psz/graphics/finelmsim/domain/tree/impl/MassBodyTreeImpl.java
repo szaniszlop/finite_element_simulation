@@ -17,7 +17,7 @@ import lombok.extern.slf4j.Slf4j;
 @Slf4j
 public class MassBodyTreeImpl implements MassBodyTree {
 
-    private final List<TreeNode> content;
+    private final List<TreeNode> treeContent;
     private final AtomicInteger contentLastIndex;
 
     public MassBodyTreeImpl(double size, int numElements){
@@ -27,34 +27,36 @@ public class MassBodyTreeImpl implements MassBodyTree {
             size * size + 4 * (Math.log(size * size) / Math.log(4) - 1) 
             + numElements );
         log.debug("Creating tree with capacity {} for number of elements {}", estimatedArraySize, numElements);
-        content = Arrays.asList(new TreeNode[estimatedArraySize]);
+        treeContent = Arrays.asList(new TreeNode[estimatedArraySize]);
         contentLastIndex = new AtomicInteger(0);
         int rootIndex = contentLastIndex.getAndIncrement();
-        content.set(0, new TreeNode(true, rootIndex, rootIndex, new Position(size / 2, size / 2), size,  Optional.empty(), Optional.empty()));
+        treeContent.set(0, new TreeNode(true, rootIndex, rootIndex, 0, new Position(size / 2, size / 2), size,  Optional.empty(), Optional.empty()));
     }
 
     @Override
     public void addBody(MassiveBody body) {
-        addBody(body, 0);
+        log.debug("Adding body {} to tree", body);
+        addBody(body, treeContent.get(0));
     }
 
     @Override
     public List<TreeNode> getNodes() {
-        log.debug("Nodes in tree: {}", content.size());
+        log.debug("Nodes in tree: {}", treeContent.size());
         return Collections.unmodifiableList(
-                content.stream()
+                treeContent.stream()
                 .filter( e -> e != null)
                 .toList());
     }
     
     @Override
     public void calculateMassDistribution(){
-        for(int i = content.size() - 1 ; i>= 0 ; i--){
-            TreeNode currentNode = content.get(i);
+        for(int i = treeContent.size() - 1 ; i>= 0 ; i--){
+            TreeNode currentNode = treeContent.get(i);
             if(currentNode != null){
                 currentNode.setCenterMass(nodeCenterMass(currentNode));        
             }
         }
+        log.info("Final mass calculated for tree {}", treeContent.get(0).centerMass().get().getMass());
     }
 
     @Override
@@ -64,15 +66,15 @@ public class MassBodyTreeImpl implements MassBodyTree {
         // return the node center mass
         // otherwise return the center masses of the child nodes
         List<MassiveBody> result = new ArrayList<>();
-        collectAtractorsFromNode(position, theta, content.get(0), result);
+        collectAtractorsFromNode(position, theta, treeContent.get(0), result);
         return result;
     }
 
     @Override
     public void clearNode(int nodeIndex) {
-        if(nodeIndex < content.size()){
-            TreeNode currentNode = content.get(nodeIndex);
-            if (currentNode.childIndex() == nodeIndex & currentNode.isLeaf()) {
+        if(nodeIndex < treeContent.size()){
+            TreeNode currentNode = treeContent.get(nodeIndex);
+            if (currentNode.myIndex() == nodeIndex && currentNode.isLeaf()) {
                 currentNode.clearContent();
             }
         }
@@ -80,27 +82,35 @@ public class MassBodyTreeImpl implements MassBodyTree {
 
     @Override
     public void replaceNode(TreeNode oldNode, TreeNode newNode) {
-        if(oldNode.childIndex() < content.size()){
-            TreeNode currentNode = content.get(oldNode.childIndex());
+        if(oldNode.childIndex() < treeContent.size()){
+            TreeNode currentNode = treeContent.get(oldNode.childIndex());
             if (currentNode.childIndex() == newNode.childIndex() & currentNode.isLeaf() & newNode.isLeaf()) {
-                content.set(oldNode.childIndex(), newNode);
+                treeContent.set(oldNode.childIndex(), newNode);
             }
         }
     }
 
-    private void collectAtractorsFromNode(Position position, double theta, TreeNode node, List<MassiveBody> result){
+    @Override
+    public boolean verifyTree() {
+        log.info("Checking tree");
+        boolean result = verifyNode(treeContent.get(0));
+        log.info("Tree verification result: {}", result);
+        return result; 
+    }
+
+     private void collectAtractorsFromNode(Position position, double theta, TreeNode node, List<MassiveBody> result){
         
         if(node.isLeaf() || isBarnesHutCondition(position, node, theta)){
             result.add(node.centerMass().get());  
         } else {
             collectAtractorsFromNode(position, theta, 
-                content.get(node.childIndex() + 0), result);
+                treeContent.get(node.childIndex() + 0), result);
             collectAtractorsFromNode(position, theta, 
-                content.get(node.childIndex() + 1), result );
+                treeContent.get(node.childIndex() + 1), result );
             collectAtractorsFromNode(position, theta, 
-                content.get(node.childIndex() + 2), result);
+                treeContent.get(node.childIndex() + 2), result);
             collectAtractorsFromNode(position, theta, 
-                content.get(node.childIndex() + 3), result);                                                            
+                treeContent.get(node.childIndex() + 3), result);                                                            
         }
   
     }
@@ -111,57 +121,58 @@ public class MassBodyTreeImpl implements MassBodyTree {
     }
 
     private MassiveBody nodeCenterMass(TreeNode currentNode){
-        MassiveBody emptyMass = MassiveBody.stationary(currentNode.center(), 0);
+        MassiveBody emptyMass = MassiveBody.stationary(currentNode.center().clone(), 0);
 
         if( currentNode.isLeaf() ){
             return currentNode.content().or(() -> Optional.of(emptyMass)).get();                                    
         } 
         // calculate parent node center mass based on children center mass
 
-        MassiveBody m0 = content.get(currentNode.childIndex())
+        MassiveBody m0 = treeContent.get(currentNode.childIndex())
             .centerMass().orElse(emptyMass);
-        MassiveBody m1 = content.get(currentNode.childIndex() + 1)
+        MassiveBody m1 = treeContent.get(currentNode.childIndex() + 1)
             .centerMass().orElse(emptyMass);
-        MassiveBody m2 = content.get(currentNode.childIndex() + 2)
+        MassiveBody m2 = treeContent.get(currentNode.childIndex() + 2)
             .centerMass().orElse(emptyMass);
-        MassiveBody m3 = content.get(currentNode.childIndex() + 3)
+        MassiveBody m3 = treeContent.get(currentNode.childIndex() + 3)
             .centerMass().orElse(emptyMass);     
-        int finalMass = m0.mass() + m1.mass() + m2.mass() + m3.mass();  
-        MassiveBody nodeCenterMass = null;
-        if(finalMass > 0){
-            nodeCenterMass = MassiveBody.stationary( new Position(
-            (m0.mass() * m0.position().x() 
-            + m1.mass() * m1.position().x() 
-            + m2.mass() * m2.position().x()
-            + m3.mass() * m3.position().x()) / finalMass,
-            (m0.mass() * m0.position().y() 
-            + m1.mass() * m1.position().y() 
-            + m2.mass() * m2.position().y()
-            + m3.mass() * m3.position().y()) / finalMass), 
-            finalMass); 
-        } else {
-            nodeCenterMass = emptyMass;
-        }
+        int finalMass = m0.getMass() + m1.getMass() + m2.getMass() + m3.getMass();  
 
+        MassiveBody nodeCenterMass = emptyMass;
+        if(finalMass > 0){
+            nodeCenterMass.getPosition().setCoordinates(
+                (m0.getMass() * m0.getPosition().getX() 
+                + m1.getMass() * m1.getPosition().getX() 
+                + m2.getMass() * m2.getPosition().getX()
+                + m3.getMass() * m3.getPosition().getX()) / finalMass,
+                (m0.getMass() * m0.getPosition().getY() 
+                + m1.getMass() * m1.getPosition().getY() 
+                + m2.getMass() * m2.getPosition().getY()
+                + m3.getMass() * m3.getPosition().getY()) / finalMass
+            );
+            nodeCenterMass.setMass(finalMass);
+        } 
         return nodeCenterMass;           
     }
 
-    private void addBody(MassiveBody body, int index){
-        TreeNode node = content.get(index);
-        // log.debug("Add Body {} to note {} on index {}", body, node, index);
+    private void addBody(MassiveBody body, TreeNode node){
+        log.debug("Add Body {} to note {} on index {}", body, node);
+
         if(node.isLeaf()){
-            boolean finished = false;
-            synchronized(node){
-                if(content.get(index) == node){  // am I still a leaf or someone changed me in the emantime
+            boolean finished = false;   
+            TreeNode myNode = treeContent.get(node.myIndex());                         
+            synchronized(myNode){              
+                if(treeContent.get(node.myIndex()) == myNode &&
+                    treeContent.get(node.myIndex()).isLeaf() ){  // am I still a leaf or someone changed me in the emantime
                     if(!node.content().isPresent()){
-                        setBodyToNode(body, node, index);
+                        setBodyToNode(body, node);
                     } else {
                         if(node.size() <= Position.MIN_DISTANCE || 
-                                node.content().get().position()
-                                .distanceFromSquared(body.position()) <= Position.MIN_DISTANCE ){
-                            combineBodies(body, node, index); 
+                                node.content().get().getPosition()
+                                .distanceFromSquared(body.getPosition()) <= Position.MIN_DISTANCE ){
+                            mergeBodies(body, node); 
                         } else {
-                            splitNode(body, node, index);
+                            splitNode(body, node);
                         }
                     }
                     finished = true;
@@ -170,74 +181,156 @@ public class MassBodyTreeImpl implements MassBodyTree {
             if(!finished){
                 // node changed state before we could lock it
                 // go to parent and try again
-                addBody(body, node.parentIndex());
+                log.debug("Node changed state before we could lock it, trying to add to parent node on index {}", treeContent.get(node.parentIndex()));
+                addBody(body, treeContent.get(myNode.parentIndex()));
             }
         } else {
+      
             // identify the child node to add the new mass into
             //   | 01 | 00 |
             //   | 11 | 10 |
-            int childOffset = 0;
-            if(node.center().x() - body.position().x() > 0){
+            int childOffset = 0;            
+            TreeNode myNode = treeContent.get(node.myIndex());
+            int childIndex = myNode.childIndex();
+            Position nodeCenter = myNode.center();
+
+            if(nodeCenter.getX() - body.getPosition().getX() > 0.0){
                 childOffset++;
             }
-            if(node.center().y() - body.position().y() <= 0){
+            if(nodeCenter.getY() - body.getPosition().getY() < 0.0){
                 childOffset++;
                 childOffset++;
             }
-            addBody(body, node.childIndex() + childOffset);
+            TreeNode childNode = treeContent.get(childIndex + childOffset);
+/*             
+            if(childNode.bodyOutOfGrid(body)){
+                log.info("Selected Node {} boundary {}, Body position {}, child offset {}, node size {}, my index {}, my child index {}, child parent index {}, child index{}", 
+                childOffset, node.printBoundary(), body.getPosition(), childOffset, node.size(), node.myIndex(), node.childIndex(), childNode.parentIndex(), childNode.myIndex());
+                
+                TreeNode n = treeContent.get(childIndex + 0);
+                log.info("Node 0 coordinates box X {} - {}, Box Y {} - {}, parent {}, self {}, size {}, node child index {}",   
+                    n.center().getX() - n.size() / 2, n.center().getX() + n.size() / 2, 
+                    n.center().getY() - n.size() / 2, n.center().getY() + n.size() / 2,
+                    n.parentIndex(), n.myIndex(), n.size(), n.childIndex());      
+                n = treeContent.get(childIndex + 1);
+                log.info("Node 1 coordinates box X {} - {}, Box Y {} - {}, parent {}, self {}, size {}, node child index {}",   
+                    n.center().getX() - n.size() / 2, n.center().getX() + n.size() / 2, 
+                    n.center().getY() - n.size() / 2, n.center().getY() + n.size() / 2,
+                    n.parentIndex(), n.myIndex(), n.size(), n.childIndex());   
+                n = treeContent.get(childIndex + 2);
+                log.info("Node 2 coordinates box X {} - {}, Box Y {} - {}, parent {}, self {}, size {}, node child index {}",   
+                    n.center().getX() - n.size() / 2, n.center().getX() + n.size() / 2, 
+                    n.center().getY() - n.size() / 2, n.center().getY() + n.size() / 2,
+                    n.parentIndex(), n.myIndex(), n.size(), n.childIndex());   
+                n = treeContent.get(childIndex + 3);
+                log.info("Node 3 coordinates box X {} - {}, Box Y {} - {}, parent {}, self {}, size {}, node child index {}",   
+                    n.center().getX() - n.size() / 2, n.center().getX() + n.size() / 2, 
+                    n.center().getY() - n.size() / 2, n.center().getY() + n.size() / 2,
+                    n.parentIndex(), n.myIndex(), n.size(), n.childIndex());                                                                     
+            } 
+    */
+            addBody(body, childNode);
         }
     }
 
-    private void setBodyToNode(MassiveBody body, TreeNode node, int index){
-        // log.debug("Setting body {} to note {} on index {}", body, node, index);
-        TreeNode newNode = new TreeNode(true, node.parentIndex(), node.childIndex(), node.center(), node.size(),  Optional.of(body), node.centerMass());
-        content.set(index, newNode);
-        // log.debug("New node created {}", newNode);
+    private void setBodyToNode(MassiveBody body, TreeNode node){
+        log.debug("Setting body {} to node {} on index {}", body, node, node.myIndex());
+        node.setContent(body);
     }
 
-    private void combineBodies(MassiveBody body, TreeNode node, int index){
-        // log.debug("Adding mass {} to node {} on index {}", body.mass(), node, index);
-        TreeNode newNode = new TreeNode(true, node.parentIndex(), node.childIndex(), 
-            body.position(), node.size(),  
-            Optional.of(node.content().get().merge(body)), 
-            node.centerMass());
-        content.set(index, newNode);
-        // log.debug("New node created {}", newNode);
+    private void mergeBodies(MassiveBody body, TreeNode node){
+        // log.debug("Adding mass {} to node {} on index {}", body.getMass(), node, index);
+        node.content().get().mergeWith(body);
+        log.debug("New node mass {}", node.content().get().getMass());
     }    
 
-    private void splitNode(MassiveBody body, TreeNode node, int index){
+    private void splitNode(MassiveBody body, TreeNode node){
         int childPosition = contentLastIndex.getAndAdd(4);
-        // create new root node pointing to its children at the end of the array
-        TreeNode newRoot = new TreeNode(false, node.parentIndex(), 
-                childPosition, node.center(), node.size(),  
-                Optional.empty(), node.centerMass());
+        int index = node.myIndex();
+
         // Create child nodes by splitting the original node in half horizontaly and verticaly
-        double childSize = node.size() / 2;
-        double centerOffset = childSize / 2;
-        TreeNode t0 = new TreeNode(true, index, childPosition + 0, 
-            new Position(node.center().x() + centerOffset, node.center().y() - centerOffset), 
+        double childSize = node.size() / 2.0;
+        double centerOffset = childSize / 2.0;
+        TreeNode t0 = new TreeNode(true, index, childPosition + 0, childPosition + 0, 
+            new Position(node.center().getX() + centerOffset, node.center().getY() - centerOffset), 
             childSize,  Optional.empty(), Optional.empty());
-        TreeNode t1 = new TreeNode(true, index, childPosition + 1, 
-            new Position(node.center().x() - centerOffset, node.center().y() - centerOffset), 
+        TreeNode t1 = new TreeNode(true, index, childPosition + 1, childPosition + 1,
+            new Position(node.center().getX() - centerOffset, node.center().getY() - centerOffset), 
             childSize,  Optional.empty(), Optional.empty());
-        TreeNode t2 = new TreeNode(true, index, childPosition + 2, 
-            new Position(node.center().x() + centerOffset, node.center().y() + centerOffset), 
+        TreeNode t2 = new TreeNode(true, index, childPosition + 2, childPosition + 2,
+            new Position(node.center().getX() + centerOffset, node.center().getY() + centerOffset), 
             childSize,  Optional.empty(), Optional.empty());
-        TreeNode t3 = new TreeNode(true, index, childPosition + 3, 
-            new Position(node.center().x() - centerOffset, node.center().y() + centerOffset), 
+        TreeNode t3 = new TreeNode(true, index, childPosition + 3, childPosition + 3,
+            new Position(node.center().getX() - centerOffset, node.center().getY() + centerOffset), 
             childSize,  Optional.empty(), Optional.empty());
         // add the new child nodes at the positions denoted by childPosition
-        content.set(childPosition + 0, t0);
-        content.set(childPosition + 1, t1);
-        content.set(childPosition + 2, t2);
-        content.set(childPosition + 3, t3);
+        treeContent.set(childPosition + 0, t0);
+        treeContent.set(childPosition + 1, t1);
+        treeContent.set(childPosition + 2, t2);
+        treeContent.set(childPosition + 3, t3);
+
         // and replace the old node with the new root node
-        content.set(index, newRoot);
+        MassiveBody oldContent = node.content().get();
+        node.setChildIndex(childPosition);
+        node.clearContent();  
+        node.setIsLeaf(false);
+
         // add the old node content into the new root node
-        addBody(node.content().get(), index);
+        log.debug("** Adding old body {} to new root node {} on index {}", oldContent, node, index);
+        addBody(oldContent, node);
+
         // add the new mass into the new root node
-        addBody(body, index);
+        log.debug("** Adding new body {} to new root node {} on index {}", body, node, index);
+        addBody(body, node);
+
+       
     }
 
+   private boolean verifyNode(TreeNode node){
+        boolean result = true;
+        if(node.isLeaf()){
+            return true;
+        } else {
+            double minX, maxX, minY, maxY;
+                minX = node.center().getX() - node.size() / 2;
+                maxX = node.center().getX() + node.size() / 2;
+                minY = node.center().getY() - node.size() / 2;
+                maxY = node.center().getY() + node.size() / 2;
+                TreeNode n0 = treeContent.get(node.childIndex() + 0);
+                TreeNode n1 = treeContent.get(node.childIndex() + 1);    
+                TreeNode n2 = treeContent.get(node.childIndex() + 2);    
+                TreeNode n3 = treeContent.get(node.childIndex() + 3);    
+                if(n0.size() != node.size() / 2 || n1.size() != node.size() / 2 || n2.size() != node.size() / 2 || n3.size() != node.size() / 2){
+                    log.error("Size incorrect, parent node {}, parent size {}, child 0 size {}, child 1 size {}, child 2 size {}, child 3 size {}", 
+                    node.myIndex(), node.size(), n0.size(), n1.size(), n2.size(), n3.size());
+                    result = false;
+                }
+
+                if(n0.center().getX() + n0.size() / 2 < maxX || n0.center().getY() - n0.size() / 2 > minY){
+                    log.error("Child node {} boundary {}, is out of bounds for parent node {} boundary {}, size {}", 
+                        n0, n0.printBoundary(), node, node.printBoundary(), node.size());
+                    result = false; 
+                    }
+                if(n1.center().getX() - n1.size() / 2 > minX || n1.center().getY() - n1.size() / 2 > minY){
+                    log.error("Child node {} boundary {}, is out of bounds for parent node {} boundary {}, size {}", 
+                        n1, n1.printBoundary(), node, node.printBoundary(), node.size());
+                    result = false;
+                    }
+                if(n2.center().getX() + n2.size() / 2 < maxX || n2.center().getY() + n2.size() / 2 < maxY){
+                    log.error("Child node {} boundary {}, is out of bounds for parent node {} boundary {}, size {}", 
+                        n2, n2.printBoundary(), node, node.printBoundary(), node.size());
+                    result = false;
+                    }                
+                if(n3.center().getX() - n3.size() / 2 > minX || n3.center().getY() + n3.size() / 2 < maxY){
+                    log.error("Child node {} boundary {}, is out of bounds for parent node {} boundary {}, size {}", 
+                        n3, n3.printBoundary(), node, node.printBoundary(), node.size());
+                    result = false;
+                    }   
+                for(int i = 0; i < 4; i++){
+                    result = result && verifyNode(treeContent.get(node.childIndex() + i));
+                }                 
+        }
+        return result;
+    }
 
 }

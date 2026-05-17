@@ -14,8 +14,8 @@ public class AccelerationCalculatorTest {
         Position position = new Position(-2, -2);
         double distance = position.distanceFromOrigin();
         double velocityMagnitude = distance;                
-        double angle = Math.acos((position.x() ) / distance);
-        if(position.y() < 0){
+        double angle = Math.acos((position.getX() ) / distance);
+        if(position.getY() < 0){
             angle = angle * -1;
         }
         angle = angle + Math.PI / 2;

@@ -119,15 +119,15 @@ public class MassTreeCanvas extends BaseCanvas {
             0, new float[]{3}, 0);
             g.setStroke(dotted);
             if(node.size() == 1){
-                int x = (int)Math.round(node.center().x() * xstep + 2);
-                int y = (int)Math.round(node.center().y() * ystep + 2);
+                int x = (int)Math.round(node.center().getX() * xstep + 2);
+                int y = (int)Math.round(node.center().getY() * ystep + 2);
                 if(x >= 0 && x < width && y >= 0 && y < height){
                     g.drawRect(x, y,  xStepInt - 4, yStepInt - 4);
                 }
                 
             } else {
-                int x = (int)Math.round((node.center().x() - node.size() / 2) * xstep + 2);
-                int y = (int)Math.round((node.center().y() - node.size() / 2) * ystep + 2);
+                int x = (int)Math.round((node.center().getX() - node.size() / 2) * xstep + 2);
+                int y = (int)Math.round((node.center().getY() - node.size() / 2) * ystep + 2);
                 int nodeSize = (int) Math.max(1, Math.round(node.size()));
                 if(x >= 0 && x < width && y >= 0 && y < height){
                     g.drawRect(x, y,  nodeSize * xStepInt - 4, nodeSize * yStepInt - 4);
@@ -144,19 +144,19 @@ public class MassTreeCanvas extends BaseCanvas {
     
     private void drawMass(Graphics2D g, MassiveBody body){
         g.setColor(Color.BLUE);
-        Position p = body.position();
-        int size = Math.max(xStepInt / 4, 2) * (int)Math.round(Math.sqrt(body.mass()));
-        int x = (int) Math.round(p.x() * xstep - size / 2);
-        int y = (int) Math.round(p.y() * ystep - size / 2);
+        Position p = body.getPosition();
+        int size = Math.max(xStepInt / 4, 2) * (int)Math.round(Math.sqrt(body.getMass()));
+        int x = (int) Math.round(p.getX() * xstep - size / 2);
+        int y = (int) Math.round(p.getY() * ystep - size / 2);
         g.drawOval(x, y, size, size);
     }
 
     private void drawBody(Graphics2D g, MassiveBody body){
 
-        g.setColor(new Color(255, Math.max(0, 255 - body.mass()), Math.max(0, 255 - body.mass())));
-        Position p = body.position();
-        int x = (int) Math.round(p.x() * xstep );
-        int y = (int) Math.round(p.y() * ystep);
+        g.setColor(new Color(255, Math.max(0, 255 - body.getMass()), Math.max(0, 255 - body.getMass())));
+        Position p = body.getPosition();
+        int x = (int) Math.round(p.getX() * xstep );
+        int y = (int) Math.round(p.getY() * ystep);
         g.drawLine(x, y, x, y);
     }   
     
@@ -174,7 +174,7 @@ public class MassTreeCanvas extends BaseCanvas {
     }
 
     private void showSingleBody(Graphics2D g, MassiveBody body){
-        List<MassiveBody> attractors = tree.getAttractors(body.position(), this.theta);
+        List<MassiveBody> attractors = tree.getAttractors(body.getPosition(), this.theta);
         attractors.stream().forEach( e -> drawMass(g, e));
         log.info("Number of attractors for body {} is {}, theta: {}", body, attractors.size(), theta);
         drawBody(g, body);

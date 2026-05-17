@@ -35,7 +35,7 @@ public class MethodTimer< T > {
         long start = System.nanoTime();
         method.execute();
         long end = System.nanoTime();
-        log.info("{} executed in {} {}-seconds ", methodName, (end - start) / timeUnit.nanoMultiplier, timeUnit.name());
+        log.debug("{} executed in {} {}-seconds ", methodName, (end - start) / timeUnit.nanoMultiplier, timeUnit.name());
         methodStatistics.computeIfAbsent(methodName, k -> new MethodTimingStatistics(timeUnit)).addExecutionTime(end - start);
     }    
 
@@ -43,13 +43,14 @@ public class MethodTimer< T > {
         long start = System.nanoTime();
         T result = method.get();
         long end = System.nanoTime();
-        log.info("{} executed in {} {}-seconds ", methodName, (end - start) / timeUnit.nanoMultiplier, timeUnit.name());
+        log.debug("{} executed in {} {}-seconds ", methodName, (end - start) / timeUnit.nanoMultiplier, timeUnit.name());
         methodStatistics.computeIfAbsent(methodName, k -> new MethodTimingStatistics(timeUnit)).addExecutionTime(end - start);
         return result;
     }   
     
     public static void logStatistics(){
-        methodStatistics.forEach((methodName, stats) -> {
+        methodStatistics.keySet().forEach(methodName -> {
+            MethodTimingStatistics stats = methodStatistics.get(methodName);
             log.info("Method: {}, Average Execution Time: {} {} over {} executions", methodName, stats.getAverageTime() / stats.timeUnit.nanoMultiplier, stats.timeUnit.name(), stats.executionCount);
         });
     }

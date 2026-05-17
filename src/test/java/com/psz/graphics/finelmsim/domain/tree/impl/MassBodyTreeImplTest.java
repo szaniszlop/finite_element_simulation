@@ -25,41 +25,52 @@ public class MassBodyTreeImplTest {
         assertEquals(1, tree.getNodes().size());
 
         // a(2, 2)
+        log.info("Add body d(2, 2)");
         tree.addBody(MassiveBody.stationary(new Position(2, 2), 1));
         printTree(tree);
         assertEquals(1, tree.getNodes().size());
   
         // b(6, 1)
+        log.info("Add body d(6, 1)");
         tree.addBody(MassiveBody.stationary(new Position(6, 1), 1));
         printTree(tree);
         assertEquals(5, tree.getNodes().size());
         
         // c(4, 2)
+        log.info("Add body d(4, 2)");
         tree.addBody(MassiveBody.stationary(new Position(4, 2), 3));
         printTree(tree);   
         assertEquals(9, tree.getNodes().size());
  
         // a'(2, 2)
+        log.info("Add body d(2, 2)");
         tree.addBody(MassiveBody.stationary(new Position(2, 2), 1));
         printTree(tree);  
         assertEquals(9, tree.getNodes().size());
-        assertEquals(2, tree.getNodes().get(2).content().get().mass());
+        assertEquals(2, tree.getNodes().get(2).content().get().getMass());
           
         // d(5, 3)
+        log.info("Add body d(5, 3)");
         tree.addBody(MassiveBody.stationary(new Position(5, 3), 5));
         printTree(tree);  
-        assertEquals(13, tree.getNodes().size());
-        assertEquals(3, tree.getNodes().get(10).content().get().mass());
-        assertEquals(5, tree.getNodes().get(11).content().get().mass());
+        assertEquals(9, tree.getNodes().size());
+        assertEquals(3, tree.getNodes().get(6).content().get().getMass());
+        assertEquals(5, tree.getNodes().get(8).content().get().getMass());
 
         // e(7, 4)
+        log.info("Add body d(7, 4)");
         tree.addBody(MassiveBody.stationary(new Position(7, 4), 7));
         printTree(tree);  
-        assertEquals(13, tree.getNodes().size());
-        assertEquals(3, tree.getNodes().get(10).content().get().mass());
-        assertEquals(5, tree.getNodes().get(11).content().get().mass());    
-        assertEquals(3, tree.getNodes().get(10).content().get().mass());
-        assertEquals(7, tree.getNodes().get(3).content().get().mass());     
+        assertEquals(9, tree.getNodes().size());
+        assertEquals(3, tree.getNodes().get(6).content().get().getMass());
+        assertEquals(5, tree.getNodes().get(8).content().get().getMass());    
+          assertEquals(7, tree.getNodes().get(7).content().get().getMass());     
+
+        // e(6.9, 3.9)
+        log.info("Add body d(6.9, 3.9)");
+        tree.addBody(MassiveBody.stationary(new Position(6.9, 3.9), 8));
+        printTree(tree);     
+        tree.verifyTree();    
     }
 
 

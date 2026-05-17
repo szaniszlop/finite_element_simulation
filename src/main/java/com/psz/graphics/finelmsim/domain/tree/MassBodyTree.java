@@ -19,5 +19,7 @@ public interface MassBodyTree {
 
     List<MassiveBody> getAttractors(Position position, double theta);
 
+    boolean verifyTree();
+
 
 }
