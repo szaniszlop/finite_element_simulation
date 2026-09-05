@@ -69,11 +69,15 @@ public class GravitySimulator implements Runnable{
     @Override
     public void run() {
         log.info("Simulation run started");
+        long lastTime = System.nanoTime();
         try{
             while(running && bodies != null){
                 long frameStartTime = System.nanoTime();
+                long elapsedTime = frameStartTime - lastTime;
+                double deltaT = elapsedTime / NANOS_IN_SECOND / 2;
                 MethodTimer.timeMethodExecution("updateBodies", MethodTimer.TimeUnit.mili, 
-                    () -> updateBodies()); 
+                    () -> updateBodies(deltaT)); 
+                lastTime = frameStartTime;    
                 MethodTimer.timeMethodExecution("displayBodies", MethodTimer.TimeUnit.micro, 
                     () -> displayBodies());     
                 long frameStopTime = System.nanoTime();
@@ -87,7 +91,7 @@ public class GravitySimulator implements Runnable{
         log.info("Simulation run finished");
     }
 
-    private void updateBodies(){
+    private void updateBodies(double deltaT){
         this.bodies = calculation.step(deltaT, theta);
     }
 
